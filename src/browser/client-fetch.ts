@@ -12,14 +12,21 @@ function isAbsoluteHttp(url: string): boolean {
 function enhanceBrowserFetchError(url: string, err: unknown, timeoutMs: number): Error {
   const hint = isAbsoluteHttp(url)
     ? "If this is a sandboxed session, ensure the sandbox browser is running and try again."
-    : `Start (or restart) the Clawdbot gateway (Clawdbot.app menubar, or \`${formatCliCommand("clawdbot gateway")}\`) and try again.`;
+    : `Start (or restart) the OpenClaw gateway (OpenClaw.app menubar, or \`${formatCliCommand("openclaw gateway")}\`) and try again.`;
   const msg = String(err);
-  if (msg.toLowerCase().includes("timed out") || msg.toLowerCase().includes("timeout")) {
+  const msgLower = msg.toLowerCase();
+  const looksLikeTimeout =
+    msgLower.includes("timed out") ||
+    msgLower.includes("timeout") ||
+    msgLower.includes("aborted") ||
+    msgLower.includes("abort") ||
+    msgLower.includes("aborterror");
+  if (looksLikeTimeout) {
     return new Error(
-      `Can't reach the clawd browser control service (timed out after ${timeoutMs}ms). ${hint}`,
+      `Can't reach the openclaw browser control service (timed out after ${timeoutMs}ms). ${hint}`,
     );
   }
-  return new Error(`Can't reach the clawd browser control service. ${hint} (${msg})`);
+  return new Error(`Can't reach the openclaw browser control service. ${hint} (${msg})`);
 }
 
 async function fetchHttpJson<T>(
@@ -48,7 +55,7 @@ export async function fetchBrowserJson<T>(
   const timeoutMs = init?.timeoutMs ?? 5000;
   try {
     if (isAbsoluteHttp(url)) {
-      return await fetchHttpJson<T>(url, init ? { ...init, timeoutMs } : { timeoutMs });
+      return await fetchHttpJson<T>(url, { ...init, timeoutMs });
     }
     const started = await startBrowserControlServiceFromConfig();
     if (!started) {
