@@ -1,5 +1,7 @@
-import type { OpenClawConfig, OpenClawPluginApi } from "openclaw/plugin-sdk/memory-core";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-types";
 import { resolveMemoryDreamingConfig } from "openclaw/plugin-sdk/memory-core-host-status";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/text-runtime";
 import { asRecord } from "./dreaming-shared.js";
 import { resolveShortTermPromotionDreamingConfig } from "./dreaming.js";
 
@@ -74,6 +76,10 @@ function formatUsage(includeStatus: string): string {
   ].join("\n");
 }
 
+function requiresAdminToMutateDreaming(gatewayClientScopes?: readonly string[]): boolean {
+  return Array.isArray(gatewayClientScopes) && !gatewayClientScopes.includes("operator.admin");
+}
+
 export function registerDreamingCommand(api: OpenClawPluginApi): void {
   api.registerCommand({
     name: "dreaming",
@@ -84,8 +90,8 @@ export function registerDreamingCommand(api: OpenClawPluginApi): void {
       const [firstToken = ""] = args
         .split(/\s+/)
         .filter(Boolean)
-        .map((token) => token.toLowerCase());
-      const currentConfig = api.runtime.config.loadConfig();
+        .map((token) => normalizeLowercaseStringOrEmpty(token));
+      const currentConfig = api.runtime.config.current() as OpenClawConfig;
 
       if (
         !firstToken ||
@@ -101,9 +107,15 @@ export function registerDreamingCommand(api: OpenClawPluginApi): void {
       }
 
       if (firstToken === "on" || firstToken === "off") {
+        if (requiresAdminToMutateDreaming(ctx.gatewayClientScopes)) {
+          return { text: "⚠️ /dreaming on|off requires operator.admin for gateway clients." };
+        }
         const enabled = firstToken === "on";
         const nextConfig = updateDreamingEnabledInConfig(currentConfig, enabled);
-        await api.runtime.config.writeConfigFile(nextConfig);
+        await api.runtime.config.replaceConfigFile({
+          nextConfig,
+          afterWrite: { mode: "auto" },
+        });
         return {
           text: [
             `Dreaming ${enabled ? "enabled" : "disabled"}.`,

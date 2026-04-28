@@ -250,6 +250,7 @@ function marketplaceEntrySourceToInput(source: MarketplaceEntrySource): string {
     case "url":
       return source.url;
   }
+  throw new Error("Unsupported marketplace entry source");
 }
 
 function parseMarketplaceManifest(
@@ -988,7 +989,7 @@ async function resolveMarketplaceEntryInstallPath(params: {
     }
     const subPath =
       params.source.kind === "github" || params.source.kind === "git"
-        ? params.source.path?.trim() || "."
+        ? normalizeOptionalString(params.source.path) || "."
         : params.source.path.trim();
     const canonicalRootDir = await fs.realpath(cloned.rootDir);
     const target = await ensureInsideMarketplaceRoot(cloned.rootDir, subPath, {
@@ -1108,6 +1109,7 @@ export async function installPluginFromMarketplace(
     logger?: MarketplaceLogger;
     timeoutMs?: number;
     mode?: "install" | "update";
+    extensionsDir?: string;
     dryRun?: boolean;
     expectedPluginId?: string;
   },
@@ -1153,6 +1155,8 @@ export async function installPluginFromMarketplace(
       path: resolved.path,
       logger: params.logger,
       mode: params.mode,
+      extensionsDir: params.extensionsDir,
+      timeoutMs: params.timeoutMs,
       dryRun: params.dryRun,
       expectedPluginId: params.expectedPluginId,
     });

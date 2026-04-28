@@ -26,6 +26,8 @@ vi.mock("./doctor-gateway-health.js", () => ({
 }));
 
 vi.mock("./doctor-memory-search.js", () => ({
+  maybeRepairMemoryRecallHealth: vi.fn().mockResolvedValue(undefined),
+  noteMemoryRecallHealth: vi.fn().mockResolvedValue(undefined),
   noteMemorySearchHealth: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -46,6 +48,10 @@ vi.mock("./doctor-security.js", () => ({
 
 vi.mock("./doctor-session-locks.js", () => ({
   noteSessionLockHealth: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("./doctor-session-transcripts.js", () => ({
+  noteSessionTranscriptHealth: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./doctor-state-integrity.js", () => ({

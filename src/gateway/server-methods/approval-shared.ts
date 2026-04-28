@@ -1,5 +1,6 @@
 import { hasApprovalTurnSourceRoute } from "../../infra/approval-turn-source.js";
 import type { ExecApprovalDecision } from "../../infra/exec-approvals.js";
+import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import type {
   ExecApprovalIdLookupResult,
   ExecApprovalManager,
@@ -112,7 +113,7 @@ export async function handleApprovalWaitDecision<TPayload>(params: {
   inputId: unknown;
   respond: RespondFn;
 }): Promise<void> {
-  const id = typeof params.inputId === "string" ? params.inputId.trim() : "";
+  const id = normalizeOptionalString(params.inputId) ?? "";
   if (!id) {
     params.respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "id is required"));
     return;
@@ -162,12 +163,15 @@ export async function handlePendingApprovalRequest<
   params.context.broadcast(params.requestEventName, params.requestEvent, { dropIfSlow: true });
 
   const hasApprovalClients = params.context.hasExecApprovalClients?.(params.clientConnId) ?? false;
-  const hasTurnSourceRoute = hasApprovalTurnSourceRoute({
-    turnSourceChannel: params.record.request.turnSourceChannel,
-    turnSourceAccountId: params.record.request.turnSourceAccountId,
-  });
   const deliveredResult = params.deliverRequest();
   const delivered = isPromiseLike(deliveredResult) ? await deliveredResult : deliveredResult;
+  const hasTurnSourceRoute =
+    !hasApprovalClients &&
+    !delivered &&
+    hasApprovalTurnSourceRoute({
+      turnSourceChannel: params.record.request.turnSourceChannel,
+      turnSourceAccountId: params.record.request.turnSourceAccountId,
+    });
 
   if (!hasApprovalClients && !hasTurnSourceRoute && !delivered) {
     params.manager.expire(params.record.id, "no-approval-route");

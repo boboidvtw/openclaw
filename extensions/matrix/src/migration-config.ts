@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-types";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
+import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
   findMatrixAccountEntry,
   requiresExplicitMatrixDefaultAccount,
@@ -40,7 +41,7 @@ export type MatrixLegacyFlatStoreTarget = MatrixMigrationAccountTarget & {
 type MatrixLegacyFlatStoreKind = "state" | "encrypted state";
 
 function clean(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return normalizeOptionalString(value) ?? "";
 }
 
 function resolveMatrixAccountConfigEntry(

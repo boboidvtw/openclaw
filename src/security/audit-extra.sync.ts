@@ -1,25 +1,16 @@
 import { resolveSandboxConfigForAgent } from "../agents/sandbox/config.js";
 import { isDangerousNetworkMode, normalizeNetworkMode } from "../agents/sandbox/network-mode.js";
-/**
- * Synchronous security audit collector functions.
- *
- * These functions analyze config-based security properties without I/O.
- */
-export {
-  collectAttackSurfaceSummaryFindings,
-  collectSmallModelRiskFindings,
-} from "./audit-extra.summary.js";
 import { resolveSandboxToolPolicyForAgent } from "../agents/sandbox/tool-policy.js";
 import type { SandboxToolPolicy } from "../agents/sandbox/types.js";
 import { getBlockedBindReason } from "../agents/sandbox/validate-sandbox-security.js";
 import { isToolAllowedByPolicies } from "../agents/tool-policy-match.js";
 import { resolveToolProfilePolicy } from "../agents/tool-policy.js";
 import { formatCliCommand } from "../cli/command-format.js";
-import type { OpenClawConfig } from "../config/config.js";
 import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
 } from "../config/model-input.js";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { AgentToolsConfig } from "../config/types.tools.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
 import { resolveAllowedAgentIds } from "../gateway/hooks-policy.js";
@@ -27,8 +18,18 @@ import {
   DEFAULT_DANGEROUS_NODE_COMMANDS,
   resolveNodeCommandAllowlist,
 } from "../gateway/node-command-policy.js";
-import { normalizeOptionalLowercaseString } from "../shared/string-coerce.js";
+import {
+  normalizeOptionalLowercaseString,
+  normalizeOptionalString,
+  normalizeStringifiedOptionalString,
+} from "../shared/string-coerce.js";
 import { pickSandboxToolPolicy } from "./audit-tool-policy.js";
+
+/**
+ * Synchronous security audit collector functions.
+ *
+ * These functions analyze config-based security properties without I/O.
+ */
 
 export type SecurityAuditFinding = {
   checkId: string;
@@ -161,7 +162,11 @@ function hasConfiguredDockerConfig(
 }
 
 function normalizeNodeCommand(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return normalizeOptionalString(value) ?? "";
+}
+
+function isWildcardEntry(value: unknown): boolean {
+  return normalizeStringifiedOptionalString(value) === "*";
 }
 
 function listKnownNodeCommands(cfg: OpenClawConfig): Set<string> {
@@ -350,12 +355,12 @@ function listPotentialMultiUserSignals(cfg: OpenClawConfig): string[] {
     }
 
     const allowFrom = Array.isArray(section.allowFrom) ? section.allowFrom : [];
-    if (allowFrom.some((entry) => String(entry).trim() === "*")) {
+    if (allowFrom.some((entry) => isWildcardEntry(entry))) {
       out.add(`${basePath}.allowFrom includes "*"`);
     }
 
     const groupAllowFrom = Array.isArray(section.groupAllowFrom) ? section.groupAllowFrom : [];
-    if (groupAllowFrom.some((entry) => String(entry).trim() === "*")) {
+    if (groupAllowFrom.some((entry) => isWildcardEntry(entry))) {
       out.add(`${basePath}.groupAllowFrom includes "*"`);
     }
 
@@ -367,7 +372,7 @@ function listPotentialMultiUserSignals(cfg: OpenClawConfig): string[] {
         out.add(`${basePath}.dm.policy="open"`);
       }
       const dmAllowFrom = Array.isArray(dmSection.allowFrom) ? dmSection.allowFrom : [];
-      if (dmAllowFrom.some((entry) => String(entry).trim() === "*")) {
+      if (dmAllowFrom.some((entry) => isWildcardEntry(entry))) {
         out.add(`${basePath}.dm.allowFrom includes "*"`);
       }
     }
@@ -475,8 +480,7 @@ export function collectSyncedFolderFindings(params: {
 
 export function collectSecretsInConfigFindings(cfg: OpenClawConfig): SecurityAuditFinding[] {
   const findings: SecurityAuditFinding[] = [];
-  const password =
-    typeof cfg.gateway?.auth?.password === "string" ? cfg.gateway.auth.password.trim() : "";
+  const password = normalizeOptionalString(cfg.gateway?.auth?.password) ?? "";
   if (password && !looksLikeEnvRef(password)) {
     findings.push({
       checkId: "config.secrets.gateway_password_in_config",
@@ -489,7 +493,7 @@ export function collectSecretsInConfigFindings(cfg: OpenClawConfig): SecurityAud
     });
   }
 
-  const hooksToken = typeof cfg.hooks?.token === "string" ? cfg.hooks.token.trim() : "";
+  const hooksToken = normalizeOptionalString(cfg.hooks?.token) ?? "";
   if (cfg.hooks?.enabled === true && hooksToken && !looksLikeEnvRef(hooksToken)) {
     findings.push({
       checkId: "config.secrets.hooks_token_in_config",
@@ -512,7 +516,7 @@ export function collectHooksHardeningFindings(
     return findings;
   }
 
-  const token = typeof cfg.hooks?.token === "string" ? cfg.hooks.token.trim() : "";
+  const token = normalizeOptionalString(cfg.hooks?.token) ?? "";
   if (token && token.length < 24) {
     findings.push({
       checkId: "hooks.token_too_short",
@@ -550,7 +554,7 @@ export function collectHooksHardeningFindings(
     });
   }
 
-  const rawPath = typeof cfg.hooks?.path === "string" ? cfg.hooks.path.trim() : "";
+  const rawPath = normalizeOptionalString(cfg.hooks?.path) ?? "";
   if (rawPath === "/") {
     findings.push({
       checkId: "hooks.path_root",
@@ -562,8 +566,7 @@ export function collectHooksHardeningFindings(
   }
 
   const allowRequestSessionKey = cfg.hooks?.allowRequestSessionKey === true;
-  const defaultSessionKey =
-    typeof cfg.hooks?.defaultSessionKey === "string" ? cfg.hooks.defaultSessionKey.trim() : "";
+  const defaultSessionKey = normalizeOptionalString(cfg.hooks?.defaultSessionKey) ?? "";
   const allowedAgentIds = resolveAllowedAgentIds(cfg.hooks?.allowedAgentIds);
   const allowedPrefixes = Array.isArray(cfg.hooks?.allowedSessionKeyPrefixes)
     ? cfg.hooks.allowedSessionKeyPrefixes
@@ -839,44 +842,8 @@ export function collectSandboxDangerousConfigFindings(cfg: OpenClawConfig): Secu
     }
   }
 
-  const browserExposurePaths: string[] = [];
-  const defaultBrowser = resolveSandboxConfigForAgent(cfg).browser;
-  if (
-    defaultBrowser.enabled &&
-    normalizeOptionalLowercaseString(defaultBrowser.network) === "bridge" &&
-    !defaultBrowser.cdpSourceRange?.trim()
-  ) {
-    browserExposurePaths.push("agents.defaults.sandbox.browser");
-  }
-  for (const entry of agents) {
-    if (!entry || typeof entry !== "object" || typeof entry.id !== "string") {
-      continue;
-    }
-    const browser = resolveSandboxConfigForAgent(cfg, entry.id).browser;
-    if (!browser.enabled) {
-      continue;
-    }
-    if (normalizeOptionalLowercaseString(browser.network) !== "bridge") {
-      continue;
-    }
-    if (browser.cdpSourceRange?.trim()) {
-      continue;
-    }
-    browserExposurePaths.push(`agents.list.${entry.id}.sandbox.browser`);
-  }
-  if (browserExposurePaths.length > 0) {
-    findings.push({
-      checkId: "sandbox.browser_cdp_bridge_unrestricted",
-      severity: "warn",
-      title: "Sandbox browser CDP may be reachable by peer containers",
-      detail:
-        "These sandbox browser configs use Docker bridge networking with no CDP source restriction:\n" +
-        browserExposurePaths.map((entry) => `- ${entry}`).join("\n"),
-      remediation:
-        "Set sandbox.browser.network to a dedicated bridge network (recommended default: openclaw-sandbox-browser), " +
-        "or set sandbox.browser.cdpSourceRange (for example 172.21.0.1/32) to restrict container-edge CDP ingress.",
-    });
-  }
+  // CDP source range is now auto-derived at runtime from the Docker network gateway
+  // for all bridge-like networks, so an unset cdpSourceRange is no longer a security gap.
 
   return findings;
 }

@@ -1,6 +1,9 @@
 import { readAcpSessionEntry, type AcpSessionStoreEntry } from "openclaw/plugin-sdk/acp-runtime";
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
-import { normalizeOptionalLowercaseString } from "openclaw/plugin-sdk/text-runtime";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-types";
+import {
+  normalizeOptionalLowercaseString,
+  normalizeOptionalString,
+} from "openclaw/plugin-sdk/text-runtime";
 import { parseDiscordTarget } from "../targets.js";
 import { resolveChannelIdForBinding } from "./thread-bindings.discord-api.js";
 import { getThreadBindingManager } from "./thread-bindings.manager.js";
@@ -95,7 +98,7 @@ export function listThreadBindingsBySessionKey(params: {
 }
 
 export async function autoBindSpawnedDiscordSubagent(params: {
-  cfg?: OpenClawConfig;
+  cfg: OpenClawConfig;
   accountId?: string;
   channel?: string;
   to?: string;
@@ -132,7 +135,7 @@ export async function autoBindSpawnedDiscordSubagent(params: {
     }
   }
   if (!channelId) {
-    const to = params.to?.trim() || "";
+    const to = normalizeOptionalString(params.to) ?? "";
     if (!to) {
       return null;
     }
